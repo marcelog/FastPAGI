@@ -1,0 +1,24 @@
+Introduction
+------------
+This is a very quick and dirty way of setting up a PAGI application via FastAGI.
+You might find the code useful even to launching your own non-PAGI apps.
+
+Configuring
+-----------
+Copy config.ini.example to config.ini.
+
+Edit config.ini
+
+The [php] section can be filled with options to be set by ini_set automagically.
+The [server] section customizes things like address to listen for connections.
+The [application] section contains some very specific options related to PAGI:
+  * log4php: Absolute path to log4php.properties file to be used by your PAGI app.
+  * bootstrap: Absolute path to be required prior to executing your PAGI app (typically
+    will set an include path or require some other files).
+  * class: The name of your PAGIApplication class.
+
+Running
+-------
+Just do a
+$ php fastagi.php /path/to/my/config.ini
+
