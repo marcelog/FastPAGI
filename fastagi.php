@@ -30,7 +30,15 @@
 function signalHandler($signal)
 {
     global $running;
-    $running = false;
+    switch ($signal) {
+        case SIGINT:
+        case SIGQUIT:
+        case SIGTERM:
+            $running = false;
+            break;
+       default:
+            break;
+    }
 }
 
 declare(ticks=1); // Needed by the signal handler to be run properly.. this is deprecated..
