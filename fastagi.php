@@ -31,6 +31,7 @@ function signalHandler($signal)
 {
     global $running;
     global $children;
+    global $pidFile;
     switch ($signal) {
         case SIGINT:
         case SIGQUIT:
@@ -44,6 +45,7 @@ function signalHandler($signal)
                 pcntl_waitpid($pid, $status);
                 unset($children[$pid]);
             }
+            @unlink($pidFile);
             break;
        case SIGCHLD:
             $pid = pcntl_waitpid(-1, $status);
@@ -60,6 +62,7 @@ $running = true;
 $socket = false;
 $retCode = 0;
 $children = array();
+$pidFile = '';
 
 try
 {
@@ -91,6 +94,21 @@ try
         throw new \Exception("Could not parse config file: $configFile");
     }
 
+    // Check if pidfile already exists.
+    if (!isset($config['server']['pid'])) {
+        throw new \Exception('Missing server.pid configuration');
+    }
+    $pidFile = $config['server']['pid'];
+    if (file_exists($pidFile)) {
+        $pid = @file_get_contents($pidFile);
+        throw new \Exception("$pidFile already exists for pid: $pid");
+    }
+
+    $pid = posix_getpid();
+    if (file_put_contents($pidFile, $pid) === false) {
+        throw new \Exception("Could not write $pidFile");
+    }
+
     // Setup php options, defined in the php section of the config file
     if (isset($config['php']) && is_array($config['php'])) {
         foreach ($config['php'] as $key => $value) {
@@ -118,7 +136,7 @@ try
         $ex = null;
         $result = @stream_select($read, $write, $ex, 0, 1);
         if ($result === false) {
-            throw new \Exception('Error selecting from socket: ' . socket_strerror(socket_last_error($this->_socket)));
+            throw new \Exception('Error selecting from socket: ' . socket_strerror(socket_last_error($socket)));
         }
         if ($result > 0) {
             if (in_array($socket, $read)) {

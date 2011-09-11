@@ -1,5 +1,6 @@
 [server]
 listen=0.0.0.0:7890
+pid=/tmp/fastagi.pid
 
 [php]
 display_errors=1

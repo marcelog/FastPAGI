@@ -10,7 +10,9 @@ Copy config.ini.example to config.ini.
 Edit config.ini
 
 The [php] section can be filled with options to be set by ini_set automagically.
-The [server] section customizes things like address to listen for connections.
+The [server] section customizes things like address to listen for connections:
+  * listen: address:port
+  * pid: Absolute path to where to write the pid file of the server
 The [application] section contains some very specific options related to PAGI:
   * log4php: Absolute path to log4php.properties file to be used by your PAGI app.
   * bootstrap: Absolute path to be required prior to executing your PAGI app (typically
