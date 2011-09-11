@@ -298,6 +298,8 @@ try
         $client = accept($socket);
         if ($client !== null) {
             launch($client, $config['application']);
+        } else {
+            usleep(1000);
         }
     } while($running);
 } catch(\Exception $e) {
