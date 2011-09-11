@@ -35,6 +35,9 @@ function signalHandler($signal)
         case SIGINT:
         case SIGQUIT:
         case SIGTERM:
+            if (!$running) {
+                break;
+            }
             $running = false;
             foreach ($children as $pid => $child) {
                 posix_kill($pid, SIGTERM);
