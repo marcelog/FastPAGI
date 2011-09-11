@@ -26,12 +26,19 @@
  *
  */
 
-// Signal Handler.
+/**
+ * This one is run by the OS whenever an interesting signal occurs.
+ *
+ * @param integer $signal The signal number
+ *
+ * @return void
+ */
 function signalHandler($signal)
 {
     global $running;
     global $children;
     global $pidFile;
+    global $socket;
     switch ($signal) {
         case SIGINT:
         case SIGQUIT:
@@ -40,17 +47,8 @@ function signalHandler($signal)
             if (!$running) {
                 break;
             }
-            // Terminate main loop, do not accept any more calls.
-            $running = false;
-            // Wait for all ongoing calls to finish (actually kill them, then wait).
-            foreach ($children as $pid => $child) {
-                posix_kill($pid, SIGTERM);
-                pcntl_waitpid($pid, $status);
-                unset($children[$pid]);
-            }
-            // Remove pid file.
-            @unlink($pidFile);
-            break;
+            cleanup();
+           break;
        case SIGCHLD:
             // A child exited normally (maybe..) so remove it from the current active list.
             $pid = pcntl_waitpid(-1, $status);
@@ -60,6 +58,116 @@ function signalHandler($signal)
     }
 }
 
+/**
+ * Called by the signal handler when a termination signal occurs.
+ *
+ * @return void
+ */
+function cleanup()
+{
+    global $children;
+    global $pidFile;
+    global $socket;
+    global $running;
+
+    // Terminate main loop, do not accept any more calls.
+    $running = false;
+
+    // Wait for all ongoing calls to finish (actually kill them, then wait).
+    foreach ($children as $pid => $child) {
+        posix_kill($pid, SIGTERM);
+        pcntl_waitpid($pid, $status);
+        unset($children[$pid]);
+    }
+    // Remove pid file.
+    @unlink($pidFile);
+    if ($socket !== false) {
+        fclose($socket);
+    }
+}
+
+/**
+ * Opens the socket server.
+ * 
+ * @param string address In the form: address:port
+ *
+ * @return stream
+ */
+function open($address)
+{
+    // Open socket stream server
+    $socket = stream_socket_server($address, $errno, $errstr);
+    if ($socket === false) {
+        throw new \Exception('Error opening socket: ' . $errstr);
+    }
+    // Non blocking mode
+    stream_set_blocking($socket, 0);
+    return $socket;
+}
+
+/**
+ * Launchs the application by fork()'ing.
+ * 
+ * @param stream   $client The client accept()ed.
+ * @param string[] $applicationOptions The application options (bootstrap, log4php, etc)
+ *
+ * @return void
+ */
+function launch($client, $applicationOptions)
+{
+    switch(($pid = pcntl_fork())) {
+        case 0:
+            try
+            {
+                // Launch PAGI application.
+                require_once $applicationOptions['bootstrap'];
+                $options = array();
+                $options['log4php.properties'] = $applicationOptions['log4php'];
+                $options['stdin'] = $client;
+                $options['stdout'] = $client;
+                $app = new $applicationOptions['class']($options);
+                $app->init();
+                $app->run();
+            } catch (\Exception $exception) {
+            }
+            exit();
+            break;
+        case -1:
+            //echo "Error forking for: " . stream_socket_get_name($newSocket, true) . "\n";
+            break;
+        default:
+            $children[$pid] = $pid;
+            //echo "Forked for: " . stream_socket_get_name($newSocket, true) . "\n";
+            break;
+    }
+}
+
+/**
+ * Non-blocking accept for a new client.
+ * 
+ * @param stream $socket The server stream
+ * 
+ * @return stream|null The new client or null.
+ */
+function accept($socket)
+{
+    $read = array($socket);
+    $write = null;
+    $ex = null;
+    $result = @stream_select($read, $write, $ex, 0, 1);
+    if ($result !== false) {
+        if ($result > 0) {
+            if (in_array($socket, $read)) {
+                return stream_socket_accept($socket);
+            }
+        }
+    }
+    return null;
+}
+
+/*************************
+ * Main Entry Point.
+ *************************/
 declare(ticks=1); // Needed by the signal handler to be run properly.. this is deprecated..
 
 // These are globals, so the try-catch can use them and be shared by to the signal handler.
@@ -125,69 +233,23 @@ try
     if (!isset($config['server']['listen'])) {
         throw new \Exception('Missing server.listen configuration');
     }
-    $listen = $config['server']['listen'];
 
     // Open socket stream server
-    $socket = stream_socket_server($listen, $errno, $errstr);
-    if ($socket === false) {
-        throw new \Exception('Error opening socket: ' . $errstr);
-    }
-    // Non blocking mode
-    stream_set_blocking($socket, 0);
+    $socket = open($config['server']['listen']);
 
     // For-ever loop accepting clients
-    while($running) {
-        $read = array($socket);
-        $write = null;
-        $ex = null;
-        $result = @stream_select($read, $write, $ex, 0, 1);
-        if ($result === false) {
-            throw new \Exception('Error selecting from socket: ' . socket_strerror(socket_last_error($socket)));
+    do
+    {
+        $client = accept($socket);
+        if ($client !== null) {
+            launch($client, $config['application']);
         }
-        if ($result > 0) {
-            if (in_array($socket, $read)) {
-                // Accept new client.
-                $newSocket = stream_socket_accept($socket);
-                if ($newSocket !== false) {
-                    $address = '';
-                    $port = 0;
-                    switch(($pid = pcntl_fork())) {
-                        case 0:
-                            try
-                            {
-                                // Launch PAGI application.
-                                require_once $config['application']['bootstrap'];
-                                $options = array();
-                                $options['log4php.properties'] = $config['application']['log4php'];
-                                $options['stdin'] = $newSocket;
-                                $options['stdout'] = $newSocket;
-                                $app = new $config['application']['class']($options);
-                                $app->init();
-                                $app->run();
-                            } catch (\Exception $exception) {
-                            }
-                            exit();
-                            break;
-                        case -1:
-                            //echo "Error forking for: " . stream_socket_get_name($newSocket, true) . "\n";
-                            break;
-                        default:
-                            $children[$pid] = $pid;
-                            //echo "Forked for: " . stream_socket_get_name($newSocket, true) . "\n";
-                            break;
-                    }
-                }
-            }
-        }
-        usleep(1000);
-    }
+    } while($running);
 } catch(\Exception $e) {
     echo "Error: " . $e->getMessage() . "\n";
     $retCode = 250;
 }
 
 // Done.
-if ($socket !== false) {
-    fclose($socket);
-}
 exit($retCode);
+
