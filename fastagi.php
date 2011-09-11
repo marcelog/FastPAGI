@@ -36,6 +36,8 @@ function signalHandler($signal)
         case SIGTERM:
             $running = false;
             break;
+       case SIGCHLD:
+            pcntl_waitpid(-1, $status, WNOHANG);
        default:
             break;
     }
@@ -65,6 +67,7 @@ try
     pcntl_signal(SIGINT, 'signalHandler');
     pcntl_signal(SIGTERM, 'signalHandler');
     pcntl_signal(SIGQUIT, 'signalHandler');
+    pcntl_signal(SIGCHLD, 'signalHandler');
 
     // Check command line arguments.
     if ($argc !== 2) {
