@@ -163,6 +163,13 @@ function accept($socket)
     return null;
 }
 
+/**
+ * For each key/value, will do ini_set($key, $value)
+ * 
+ * @param string[] Valid php options.
+ * 
+ * @return void
+ */
 function setupPhp(array $options)
 {
     foreach ($options as $key => $value) {
@@ -170,6 +177,14 @@ function setupPhp(array $options)
     }
 }
 
+/**
+ * If pidfile already exists, will throw an exception. Otherwise, will
+ * write the current pid to it (creating it).
+ *
+ * @param string $pidFile
+ *
+ * @return void
+ */
 function writePidfile($pidFile)
 {
     if (file_exists($pidFile)) {
