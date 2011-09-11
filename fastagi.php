@@ -1,10 +1,23 @@
 <?php
 
+function signalHandler($signal)
+{
+    global $running;
+    $running = false;
+}
+
+declare(ticks=1);
+$running = true;
+$socket = false;
+
 try
 {
     // Setup environment.
     error_reporting(0);
     ini_set('display_errors', 0);
+    pcntl_signal(SIGINT, 'signalHandler');
+    pcntl_signal(SIGTERM, 'signalHandler');
+    pcntl_signal(SIGQUIT, 'signalHandler');
 
     if (PHP_SAPI !== 'cli') {
         throw new \Exception('This script is intended to be run from the cli');
@@ -42,7 +55,7 @@ try
     stream_set_blocking($socket, 0);
 
     // For-ever loop accepting clients
-    while(true) {
+    while($running) {
         $read = array($socket);
         $write = null;
         $ex = null;
@@ -90,4 +103,7 @@ try
     echo "Error: " . $e->getMessage() . "\n";
 }
 
-socket_close($socket);
+if ($socket !== false) {
+    fclose($socket);
+}
+
