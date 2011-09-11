@@ -36,18 +36,23 @@ function signalHandler($signal)
         case SIGINT:
         case SIGQUIT:
         case SIGTERM:
+            // Do not run more than once.
             if (!$running) {
                 break;
             }
+            // Terminate main loop, do not accept any more calls.
             $running = false;
+            // Wait for all ongoing calls to finish (actually kill them, then wait).
             foreach ($children as $pid => $child) {
                 posix_kill($pid, SIGTERM);
                 pcntl_waitpid($pid, $status);
                 unset($children[$pid]);
             }
+            // Remove pid file.
             @unlink($pidFile);
             break;
        case SIGCHLD:
+            // A child exited normally (maybe..) so remove it from the current active list.
             $pid = pcntl_waitpid(-1, $status);
             unset($children[$pid]);
        default:
@@ -104,6 +109,7 @@ try
         throw new \Exception("$pidFile already exists for pid: $pid");
     }
 
+    // Save our pid.
     $pid = posix_getpid();
     if (file_put_contents($pidFile, $pid) === false) {
         throw new \Exception("Could not write $pidFile");
@@ -140,6 +146,7 @@ try
         }
         if ($result > 0) {
             if (in_array($socket, $read)) {
+                // Accept new client.
                 $newSocket = stream_socket_accept($socket);
                 if ($newSocket !== false) {
                     $address = '';
@@ -148,6 +155,7 @@ try
                         case 0:
                             try
                             {
+                                // Launch PAGI application.
                                 require_once $config['application']['bootstrap'];
                                 $options = array();
                                 $options['log4php.properties'] = $config['application']['log4php'];
