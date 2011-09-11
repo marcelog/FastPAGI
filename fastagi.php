@@ -30,14 +30,21 @@
 function signalHandler($signal)
 {
     global $running;
+    global $children;
     switch ($signal) {
         case SIGINT:
         case SIGQUIT:
         case SIGTERM:
             $running = false;
+            foreach ($children as $pid => $child) {
+                posix_kill($pid, SIGTERM);
+                pcntl_waitpid($pid, $status);
+                unset($children[$pid]);
+            }
             break;
        case SIGCHLD:
-            pcntl_waitpid(-1, $status, WNOHANG);
+            $pid = pcntl_waitpid(-1, $status);
+            unset($children[$pid]);
        default:
             break;
     }
@@ -49,6 +56,7 @@ declare(ticks=1); // Needed by the signal handler to be run properly.. this is d
 $running = true;
 $socket = false;
 $retCode = 0;
+$children = array();
 
 try
 {
@@ -135,6 +143,7 @@ try
                             //echo "Error forking for: " . stream_socket_get_name($newSocket, true) . "\n";
                             break;
                         default:
+                            $children[$pid] = $pid;
                             //echo "Forked for: " . stream_socket_get_name($newSocket, true) . "\n";
                             break;
                     }
