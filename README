@@ -20,5 +20,7 @@ The [application] section contains some very specific options related to PAGI:
 Running
 -------
 Just do a
-$ php fastagi.php /path/to/my/config.ini
+$ php fastagi.php /path/to/my/config.ini &
+
+You may kill(1) the process if you want to terminate it. 
 
