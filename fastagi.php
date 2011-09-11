@@ -37,8 +37,6 @@ function signalHandler($signal)
 {
     global $running;
     global $children;
-    global $pidFile;
-    global $socket;
     switch ($signal) {
         case SIGINT:
         case SIGQUIT:
