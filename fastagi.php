@@ -163,6 +163,85 @@ function accept($socket)
     return null;
 }
 
+function setupPhp(array $options)
+{
+    foreach ($options as $key => $value) {
+        ini_set($key, $value);
+    }
+}
+
+function writePidfile($pidFile)
+{
+    if (file_exists($pidFile)) {
+        $pid = @file_get_contents($pidFile);
+        throw new \Exception("$pidFile already exists for pid: $pid");
+    }
+
+    // Save our pid.
+    $pid = posix_getpid();
+    if (file_put_contents($pidFile, $pid) === false) {
+        throw new \Exception("Could not write $pidFile");
+    }
+}
+
+/**
+ * Tries to read and validate config file (for missing options).
+ * 
+ * @param string Absolute path to config file (php ini file).
+ * 
+ * @return string[] Options parsed
+ */
+function readConfigFile($configFile)
+{
+    $configFile = realpath($configFile);
+    $config = parse_ini_file($configFile, true);
+    if ($config === false) {
+        throw new \Exception("Could not parse config file: $configFile");
+    }
+    if (!isset($config['server']['pid'])) {
+        throw new \Exception('Missing server.pid configuration');
+    }
+    if (!isset($config['server']['listen'])) {
+        throw new \Exception('Missing server.listen configuration');
+    }
+    return $config;
+}
+
+/**
+ * Setups various interesting signals to be catched.
+ * 
+ * @return void
+ */
+function setupSignalHandlers()
+{
+    // Setup signal handlers.
+    pcntl_signal(SIGINT, 'signalHandler');
+    pcntl_signal(SIGTERM, 'signalHandler');
+    pcntl_signal(SIGQUIT, 'signalHandler');
+    pcntl_signal(SIGCHLD, 'signalHandler');
+}
+
+/**
+ * Will register PAGI autoloader, check the SAPI for cli, setup the signal handlers,
+ * and mute php.
+ *
+ * @return void
+ */
+function init()
+{
+    // Setup environment.
+    error_reporting(0);
+    ini_set('display_errors', 0);
+    require_once 'PAGI/Autoloader/Autoloader.php'; // Include PAGI autoloader.
+    \PAGI\Autoloader\Autoloader::register(); // Call autoloader register for PAGI autoloader.
+
+    // Check cli environment.
+    if (PHP_SAPI !== 'cli') {
+        throw new \Exception('This script is intended to be run from the cli');
+    }
+    setupSignalHandlers();
+}
+
 /*************************
  * Main Entry Point.
  *************************/
@@ -177,59 +256,22 @@ $pidFile = '';
 
 try
 {
-    // Setup environment.
-    error_reporting(0);
-    ini_set('display_errors', 0);
-    require_once 'PAGI/Autoloader/Autoloader.php'; // Include PAGI autoloader.
-    \PAGI\Autoloader\Autoloader::register(); // Call autoloader register for PAGI autoloader.
-
-    // Check cli environment.
-    if (PHP_SAPI !== 'cli') {
-        throw new \Exception('This script is intended to be run from the cli');
-    }
-
-    // Setup signal handlers.
-    pcntl_signal(SIGINT, 'signalHandler');
-    pcntl_signal(SIGTERM, 'signalHandler');
-    pcntl_signal(SIGQUIT, 'signalHandler');
-    pcntl_signal(SIGCHLD, 'signalHandler');
+    init();
 
     // Check command line arguments.
     if ($argc !== 2) {
         throw new \Exception("Use: $argv[0] <config file>");
     }
     // Read config file.
-    $configFile = realpath($argv[1]);
-    $config = parse_ini_file($configFile, true);
-    if ($config === false) {
-        throw new \Exception("Could not parse config file: $configFile");
-    }
+    $config = readConfigFile($argv[1]);
 
     // Check if pidfile already exists.
-    if (!isset($config['server']['pid'])) {
-        throw new \Exception('Missing server.pid configuration');
-    }
     $pidFile = $config['server']['pid'];
-    if (file_exists($pidFile)) {
-        $pid = @file_get_contents($pidFile);
-        throw new \Exception("$pidFile already exists for pid: $pid");
-    }
-
-    // Save our pid.
-    $pid = posix_getpid();
-    if (file_put_contents($pidFile, $pid) === false) {
-        throw new \Exception("Could not write $pidFile");
-    }
+    writePidfile($pidFile);
 
     // Setup php options, defined in the php section of the config file
     if (isset($config['php']) && is_array($config['php'])) {
-        foreach ($config['php'] as $key => $value) {
-            ini_set($key, $value);
-        }
-    }
-
-    if (!isset($config['server']['listen'])) {
-        throw new \Exception('Missing server.listen configuration');
+        setupPhp($config['php']);
     }
 
     // Open socket stream server
