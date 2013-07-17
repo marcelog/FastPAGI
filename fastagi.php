@@ -123,6 +123,7 @@ function launch($client, $applicationOptions)
                 $options['log4php.properties'] = $applicationOptions['log4php'];
                 $options['stdin'] = $client;
                 $options['stdout'] = $client;
+                $options['pagiClient'] = \PAGI\Client\Impl\ClientImpl::getInstance($options);
                 $app = new $applicationOptions['class']($options);
                 $app->init();
                 $app->run();
